@@ -181,11 +181,9 @@ async def upload_file(message, chat_id, folder_name):
         "Uploading..."
     )
 
-    folder_id = get_or_create_folder(folder_name)
-
-    metadata = {
-        'name': os.path.basename(file_path),
-        'parents': ['1MryJRIzGVfrGQo2y7OFkFVZysjC_ZxwS']
+metadata = {
+    'name': os.path.basename(file_path),
+    'parents': ['1MryJRIzGVfrGQo2y7OFkFVZysjC_ZxwS']
     }
 
     media = MediaFileUpload(
