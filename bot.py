@@ -45,37 +45,12 @@ PRESET_FOLDERS = [
     "Backups",
 ]
 
+SHARED_FOLDER_ID = "1MryJRIzGVfrGQo2y7OFkFVZysjC_ZxwS"
+
+
 def admin_only(user_id):
     return user_id == ADMIN_ID
 
-def get_or_create_folder(folder_name):
-    query = (
-        f"name='{folder_name}' and "
-        "mimeType='application/vnd.google-apps.folder' "
-        "and trashed=false"
-    )
-
-    results = drive_service.files().list(
-        q=query,
-        fields="files(id, name)"
-    ).execute()
-
-    items = results.get('files', [])
-
-    if items:
-        return items[0]['id']
-
-    metadata = {
-        'name': folder_name,
-        'mimeType': 'application/vnd.google-apps.folder'
-    }
-
-    folder = drive_service.files().create(
-        body=metadata,
-        fields='id'
-    ).execute()
-
-    return folder.get('id')
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not admin_only(update.effective_user.id):
@@ -85,24 +60,38 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Send me a file."
     )
 
+
 async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not admin_only(update.effective_user.id):
         return
 
-    doc = update.message.document
-
-    if not doc:
-        return
-
     os.makedirs("downloads", exist_ok=True)
 
-    file_path = f"downloads/{doc.file_name}"
+    if update.message.document:
+        file_obj = update.message.document
+        file_name = file_obj.file_name
+
+    elif update.message.photo:
+        file_obj = update.message.photo[-1]
+        file_name = f"photo_{file_obj.file_unique_id}.jpg"
+
+    elif update.message.video:
+        file_obj = update.message.video
+        file_name = (
+            file_obj.file_name
+            or f"video_{file_obj.file_unique_id}.mp4"
+        )
+
+    else:
+        return
+
+    file_path = f"downloads/{file_name}"
 
     msg = await update.message.reply_text(
         "Downloading..."
     )
 
-    tg_file = await doc.get_file()
+    tg_file = await file_obj.get_file()
 
     await tg_file.download_to_drive(file_path)
 
@@ -132,6 +121,7 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=reply_markup
     )
 
+
 async def folder_callback(update: Update, context):
     query = update.callback_query
 
@@ -160,6 +150,7 @@ async def folder_callback(update: Update, context):
         folder_name
     )
 
+
 async def custom_folder(update: Update, context):
     if not context.user_data.get("awaiting_custom_folder"):
         return
@@ -174,6 +165,7 @@ async def custom_folder(update: Update, context):
         folder_name
     )
 
+
 async def upload_file(message, chat_id, folder_name):
     file_path = pending_files[chat_id]
 
@@ -181,9 +173,9 @@ async def upload_file(message, chat_id, folder_name):
         "Uploading..."
     )
 
-metadata = {
-    'name': os.path.basename(file_path),
-    'parents': ['1MryJRIzGVfrGQo2y7OFkFVZysjC_ZxwS']
+    metadata = {
+        'name': os.path.basename(file_path),
+        'parents': [SHARED_FOLDER_ID]
     }
 
     media = MediaFileUpload(
@@ -204,6 +196,7 @@ metadata = {
 
     del pending_files[chat_id]
 
+
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
 
@@ -213,7 +206,9 @@ def main():
 
     app.add_handler(
         MessageHandler(
-            filters.Document.ALL,
+            filters.Document.ALL
+            | filters.PHOTO
+            | filters.VIDEO,
             handle_file
         )
     )
@@ -232,6 +227,7 @@ def main():
     print("Bot Running...")
 
     app.run_polling()
+
 
 if __name__ == "__main__":
     main()
